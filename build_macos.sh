@@ -213,10 +213,11 @@ echo "==> libvpx ${VPX_VER}"
 curl -fsSL --retry 3 --retry-delay 5 "https://github.com/webmproject/libvpx/archive/v${VPX_VER}.tar.gz" \
     -o libvpx-${VPX_VER}.tar.gz
 tar xf libvpx-${VPX_VER}.tar.gz && cd libvpx-${VPX_VER}
-# Derive the darwin kernel major version (e.g. 24 on macOS 15) so we pick the
-# right versioned libvpx target.  The generic "arm64-darwin-gcc" target is the
-# iOS target — the numbered ones (arm64-darwin24-gcc etc.) are macOS.
+# Derive the darwin kernel major version and cap at the highest target that
+# libvpx 1.14.1 knows about (darwin23 = macOS 14).  The generic
+# "arm64-darwin-gcc" target is iOS — the numbered ones are macOS.
 DARWIN_MAJOR=$(uname -r | cut -d. -f1)
+[ "${DARWIN_MAJOR}" -gt 23 ] && DARWIN_MAJOR=23
 if [ "$ARCH" = "arm64" ]; then
     VPX_TARGET="arm64-darwin${DARWIN_MAJOR}-gcc"
 else
