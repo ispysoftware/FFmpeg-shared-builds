@@ -341,6 +341,21 @@ done
 echo "    All deps present."
 
 # ============================================================================
+# FFmpeg cross-compilation flags.
+# --cc/--cxx must be plain compiler names; -arch goes via extra-cflags/ldflags
+# so that every configure link test (e.g. dav1d feature check) targets the
+# right architecture.  Without -arch in extra-ldflags the test object would be
+# compiled as x86_64 but linked as arm64, making all cross-dep checks fail.
+if [ "${TARGET_ARCH}" != "${ARCH}" ]; then
+    FFMPEG_CROSS_FLAGS="--enable-cross-compile --target-os=darwin"
+    FFMPEG_ARCH_CFLAGS="-arch ${TARGET_ARCH}"
+    FFMPEG_ARCH_LDFLAGS="-arch ${TARGET_ARCH}"
+else
+    FFMPEG_CROSS_FLAGS=""
+    FFMPEG_ARCH_CFLAGS=""
+    FFMPEG_ARCH_LDFLAGS=""
+fi
+
 echo ""
 echo "==> FFmpeg ${FFMPEG_VER}"
 curl -fsSL --retry 3 --retry-delay 5 "https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VER}.tar.xz" | tar xJ
@@ -353,9 +368,11 @@ cd ffmpeg-${FFMPEG_VER}
     --pkg-config-flags="--static" \
     \
     --arch=${TARGET_ARCH} \
-    $( [ "${TARGET_ARCH}" != "${ARCH}" ] && echo "--enable-cross-compile" ) \
-    --extra-cflags="${CFLAGS} -I${SYSROOT}/include" \
-    --extra-ldflags="-L${SYSROOT}/lib" \
+    --cc=clang \
+    --cxx=clang++ \
+    ${FFMPEG_CROSS_FLAGS} \
+    --extra-cflags="${CFLAGS} ${FFMPEG_ARCH_CFLAGS} -I${SYSROOT}/include" \
+    --extra-ldflags="-L${SYSROOT}/lib ${FFMPEG_ARCH_LDFLAGS}" \
     --extra-libs="-lpthread -lm" \
     \
     --enable-shared \
