@@ -85,7 +85,8 @@ export CPPFLAGS="-I${SYSROOT}/include"
 export LDFLAGS="-L${SYSROOT}/lib"
 export PKG_CONFIG=pkg-config
 export PKG_CONFIG_PATH="${SYSROOT}/lib/pkgconfig:${SYSROOT}/share/pkgconfig"
-export PKG_CONFIG_LIBDIR="${PKG_CONFIG_PATH}"
+# Do NOT set PKG_CONFIG_LIBDIR — on macOS that replaces the default search
+# paths entirely and causes Homebrew's pkg-config to miss our sysroot .pc files.
 
 mkdir -p "${SYSROOT}" "${FFMPEG_PREFIX}" "${BUILD_DIR}" "${OUT_DIR}"
 cd "${BUILD_DIR}"
