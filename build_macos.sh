@@ -171,11 +171,12 @@ cd "${BUILD_DIR}" && rm -rf libogg-*
 echo "==> libvorbis ${VORBIS_VER}"
 curl -fsSL --retry 3 --retry-delay 5 "https://downloads.xiph.org/releases/vorbis/libvorbis-${VORBIS_VER}.tar.gz" | tar xz
 cd libvorbis-${VORBIS_VER}
+# -force_cpusubtype_ALL is a PowerPC-era linker flag removed in Xcode 15+.
+# It is set in libvorbis's configure script in the darwin host section.
+# Patch the bundled configure script before running it (no autoreconf needed).
+sed -i '' 's/-force_cpusubtype_ALL//g' configure
 ./configure --prefix=${SYSROOT} --with-ogg=${SYSROOT} \
     --enable-static --disable-shared --disable-oggtest
-# Xcode 16 dropped -force_cpusubtype_ALL; patch it out of the generated
-# ./libtool script (the file make actually invokes for linking).
-sed -i '' 's/ -force_cpusubtype_ALL//g' libtool
 make -j${JOBS}
 make install
 cd "${BUILD_DIR}" && rm -rf libvorbis-*
@@ -197,9 +198,10 @@ cd "${BUILD_DIR}" && rm -rf opus-*
 echo "==> libmp3lame ${LAME_VER}"
 curl -fsSL --retry 3 --retry-delay 5 "https://downloads.sourceforge.net/project/lame/lame/${LAME_VER}/lame-${LAME_VER}.tar.gz" | tar xz
 cd lame-${LAME_VER}
+# Same flag issue as libvorbis — patch the bundled configure script before running.
+sed -i '' 's/-force_cpusubtype_ALL//g' configure
 ./configure --prefix=${SYSROOT} --enable-static --disable-shared \
     --disable-gtktest --disable-analyzer-hooks --disable-decoder --disable-frontend
-sed -i '' 's/ -force_cpusubtype_ALL//g' libtool
 make -j${JOBS} && make install
 cd "${BUILD_DIR}" && rm -rf lame-*
 
