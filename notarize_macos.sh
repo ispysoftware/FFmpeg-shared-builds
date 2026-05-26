@@ -32,6 +32,8 @@ if [ ! -f "${CONFIG_FILE}" ]; then
     exit 1
 fi
 # shellcheck source=notarize_config.sh.example
+# Strip Windows CRLF line endings before sourcing (in case edited on Windows)
+sed -i '' 's/\r//' "${CONFIG_FILE}"
 source "${CONFIG_FILE}"
 
 # App-specific password — read from sign_pwd.txt, never hardcoded.
