@@ -34,9 +34,6 @@ jobs:
             echo "val=${{ inputs.ffmpeg_ver }}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install 7-Zip
-        run: sudo apt-get install -y p7zip-full
-
       - name: Build (win64)
         shell: pwsh
         run: >

@@ -59,7 +59,7 @@ function Get-ArchConfig($a) {
         "x64"   { @{ Target = "x86_64"; Archive = "ffmpeg${FfmpegVer}-linux-x86_64.tar.xz";  OS = "linux"   } }
         "arm64" { @{ Target = "arm64";  Archive = "ffmpeg${FfmpegVer}-linux-arm64.tar.xz";   OS = "linux"   } }
         "armhf" { @{ Target = "armhf";  Archive = "ffmpeg${FfmpegVer}-linux-armhf.tar.xz";   OS = "linux"   } }
-        "win64" { @{ Target = "win64";  Archive = "ffmpeg${FfmpegVer}-windows-x64.7z";        OS = "windows" } }
+        "win64" { @{ Target = "win64";  Archive = "ffmpeg${FfmpegVer}-windows-x64.zip";       OS = "windows" } }
     }
 }
 
@@ -72,13 +72,6 @@ $archList = switch ($Arch) {
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
 
-# Locate 7-Zip once (needed for win64)
-$7z = $null
-if ($archList -contains "win64") {
-    $7z = Get-Command "7z" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-    if (-not $7z) { $7z = "C:\Program Files\7-Zip\7z.exe" }
-    if (-not (Test-Path $7z)) { throw "7-Zip not found. Install 7-Zip or add 7z.exe to PATH." }
-}
 
 foreach ($a in $archList) {
     $cfg         = Get-ArchConfig $a
@@ -111,24 +104,46 @@ foreach ($a in $archList) {
     Write-Host ""
     Write-Host "==> Creating archive: $archivePath" -ForegroundColor Cyan
 
+    # Determine which directories to extract from the container
+    $dockerDirs = if ($cfg.OS -eq "windows") { "bin" } else { "bin lib" }
+
+    # Pipe tar stream from container directly — same approach for all platforms.
+    # For Windows we then repack as zip; for Linux we keep the tar.xz as-is.
     if ($cfg.OS -eq "windows") {
-        $TempDir     = Join-Path ([System.IO.Path]::GetTempPath()) "ffmpeg-win64-$(New-Guid | Select-Object -ExpandProperty Guid)"
-        $ContainerId = (docker create $tag).Trim()
+        $TempDir = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "ffmpeg-win64-$([System.Guid]::NewGuid())")
+        New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
         try {
-            New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
-            docker cp "${ContainerId}:/opt/ffmpeg/bin/." $TempDir
-            if ($LASTEXITCODE -ne 0) { throw "docker cp failed (exit $LASTEXITCODE)" }
+            $psi = [System.Diagnostics.ProcessStartInfo]::new("docker")
+            $psi.Arguments             = "run --rm $tag tar -cf - -C /opt/ffmpeg $dockerDirs"
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError  = $true
+            $psi.UseShellExecute        = $false
+            $proc = [System.Diagnostics.Process]::Start($psi)
+            # Write tar stream to a temp file then extract
+            $tarPath = "$TempDir.tar"
+            $tarFile = [System.IO.File]::OpenWrite($tarPath)
+            try   { $proc.StandardOutput.BaseStream.CopyTo($tarFile) }
+            finally { $tarFile.Close() }
+            $proc.WaitForExit()
+            if ($proc.ExitCode -ne 0) {
+                $err = $proc.StandardError.ReadToEnd()
+                throw "docker tar failed for ${a}: $err"
+            }
+            tar xf $tarPath -C $TempDir --strip-components=1
+            Remove-Item $tarPath
+
+            $files = Get-ChildItem -Path $TempDir -File
+            Write-Host "    Files: $($files.Count) — $($files.Name -join ', ')"
+            if ($files.Count -eq 0) { throw "No files extracted from container" }
 
             if (Test-Path $archivePath) { Remove-Item $archivePath }
-            & $7z a -t7z -mx=9 -mmt=on $archivePath "$TempDir\*.dll" "$TempDir\ffmpeg.exe"
-            if ($LASTEXITCODE -ne 0) { throw "7z failed (exit $LASTEXITCODE)" }
+            Compress-Archive -Path "$TempDir/*" -DestinationPath $archivePath
         } finally {
-            docker rm $ContainerId | Out-Null
             Remove-Item -Recurse -Force $TempDir -ErrorAction SilentlyContinue
         }
     } else {
         $psi = [System.Diagnostics.ProcessStartInfo]::new("docker")
-        $psi.Arguments              = "run --rm $tag tar -cJf - -C /opt/ffmpeg bin lib"
+        $psi.Arguments              = "run --rm $tag tar -cJf - -C /opt/ffmpeg $dockerDirs"
         $psi.RedirectStandardOutput = $true
         $psi.RedirectStandardError  = $true
         $psi.UseShellExecute        = $false
@@ -139,7 +154,7 @@ foreach ($a in $archList) {
         $proc.WaitForExit()
         if ($proc.ExitCode -ne 0) {
             $err = $proc.StandardError.ReadToEnd()
-            throw "tar extraction failed for ${a}: $err"
+            throw "tar failed for ${a}: $err"
         }
     }
 
