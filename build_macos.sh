@@ -404,6 +404,14 @@ cd ffmpeg-${FFMPEG_VER}
     --enable-videotoolbox \
     --enable-audiotoolbox \
     \
+    --disable-xlib \
+    --disable-libxcb \
+    --disable-libxcb-shm \
+    --disable-libxcb-xfixes \
+    --disable-libxcb-shape \
+    --disable-libxcb-render \
+    --disable-sdl2 \
+    \
     --disable-ffplay \
     --disable-ffprobe \
     || { echo "=== ffmpeg configure failed ===";
@@ -418,6 +426,31 @@ find "${FFMPEG_PREFIX}/lib" -name '*.dylib' -not -type l \
     -exec ${STRIP} -x {} \;
 
 cd "${BUILD_DIR}" && rm -rf ffmpeg-*
+
+# ============================================================================
+# Sanity check: ensure no Homebrew libraries leaked into the output.
+# If anything from /opt/homebrew is dynamically linked, the binaries will
+# fail on machines that don't have Homebrew installed.
+# ============================================================================
+echo ""
+echo "==> Checking for Homebrew leaks..."
+LEAK_FOUND=0
+for f in "${FFMPEG_PREFIX}/bin/ffmpeg" "${FFMPEG_PREFIX}/lib"/*.dylib; do
+    [ -L "$f" ] && continue
+    [ -f "$f" ] || continue
+    LEAKS=$(otool -L "$f" | grep '/opt/homebrew' | awk '{print $1}' || true)
+    if [ -n "${LEAKS}" ]; then
+        echo "ERROR: Homebrew dependency leaked into $(basename $f):"
+        echo "${LEAKS}" | sed 's/^/    /'
+        LEAK_FOUND=1
+    fi
+done
+if [ "${LEAK_FOUND}" -eq 1 ]; then
+    echo ""
+    echo "Add --disable-<feature> flags to the FFmpeg configure call to fix this."
+    exit 1
+fi
+echo "    No Homebrew leaks found."
 
 # ============================================================================
 # 5. Fix dylib install names and rpaths
