@@ -409,7 +409,6 @@ cd ffmpeg-${FFMPEG_VER}
     --disable-libxcb-shm \
     --disable-libxcb-xfixes \
     --disable-libxcb-shape \
-    --disable-libxcb-render \
     --disable-sdl2 \
     \
     --disable-ffplay \
